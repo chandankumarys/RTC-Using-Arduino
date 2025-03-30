@@ -1,0 +1,156 @@
+#include <Wire.h>
+#include <RTClib.h>
+#include <LiquidCrystal_I2C.h>
+
+RTC_DS1307 rtc; // RTC object
+LiquidCrystal_I2C lcd(0x27, 16, 4); // LCD object (I2C address 0x27, adjust if needed)
+
+// Pins for buzzer and buttons
+const int buzzerPin = 6;
+const int hourButtonPin = 7;
+const int minuteButtonPin = 8;
+const int modeButtonPin = 9;
+const int saveButtonPin = 10;
+
+// Variables for time and alarm settings
+int alarmHour = 8, alarmMinute = 0;
+int mode = 0; // 0: Normal, 1: Adjust Time, 2: Adjust Date, 3: Adjust Alarm
+bool isAlarmActive = false;
+
+void setup() {
+  Serial.begin(9600);
+
+  // Initialize LCD
+  lcd.begin(16, 4);
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Initializing...");
+
+  // Initialize RTC
+  if (!rtc.begin()) {
+    lcd.setCursor(0, 1);
+    lcd.print("RTC not found");
+    while (1);
+  }
+
+  // Uncomment to set the RTC to the current compile time
+  // rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+
+  // Initialize pins
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(hourButtonPin, INPUT_PULLUP);
+  pinMode(minuteButtonPin, INPUT_PULLUP);
+  pinMode(modeButtonPin, INPUT_PULLUP);
+  pinMode(saveButtonPin, INPUT_PULLUP);
+
+  lcd.clear();
+}
+
+void loop() {
+  static int editHour = 0, editMinute = 0, editDay = 0, editMonth = 0, editYear = 0;
+
+  // Check the mode
+  if (digitalRead(modeButtonPin) == LOW) {
+    mode = (mode + 1) % 4; // Cycle through modes
+    delay(200); // Debounce delay
+  }
+
+  // Save settings and return to normal mode
+  if (digitalRead(saveButtonPin) == LOW) {
+    if (mode == 1) {
+      rtc.adjust(DateTime(editYear, editMonth, editDay, editHour, editMinute, 0));
+    } else if (mode == 3) {
+      alarmHour = editHour;
+      alarmMinute = editMinute;
+    }
+    mode = 0; // Return to normal mode
+    delay(200); // Debounce delay
+  }
+
+  DateTime now = rtc.now();
+
+  // Display current time or adjustment interface
+  lcd.setCursor(0, 0);
+  if (mode == 0) {
+    // Normal Mode: Display date and time
+    lcd.print("Date: ");
+    lcd.print(now.year());
+    lcd.print('/');
+    lcd.print(now.month());
+    lcd.print('/');
+    lcd.print(now.day());
+
+    lcd.setCursor(0, 1);
+    lcd.print("Time: ");
+    lcd.print(now.hour());
+    lcd.print(':');
+    lcd.print(now.minute());
+    lcd.print(':');
+    lcd.print(now.second());
+
+    // Check for alarm match
+    if (now.hour() == alarmHour && now.minute() == alarmMinute) {
+      digitalWrite(buzzerPin, HIGH);
+    } else {
+      digitalWrite(buzzerPin, LOW);
+    }
+
+  } else if (mode == 1) {
+    // Adjust Time Mode
+    if (digitalRead(hourButtonPin) == LOW) {
+      editHour = (editHour + 1) % 24;
+      delay(200); // Debounce
+    }
+    if (digitalRead(minuteButtonPin) == LOW) {
+      editMinute = (editMinute + 1) % 60;
+      delay(200); // Debounce
+    }
+
+    lcd.print("Set Time: ");
+    lcd.print(editHour);
+    lcd.print(':');
+    lcd.print(editMinute);
+
+  } else if (mode == 2) {
+    // Adjust Date Mode
+    if (digitalRead(hourButtonPin) == LOW) {
+      editYear++;
+      delay(200); // Debounce
+    }
+    if (digitalRead(minuteButtonPin) == LOW) {
+      editMonth = (editMonth % 12) + 1;
+      delay(200); // Debounce
+    }
+
+    lcd.print("Set Date: ");
+    lcd.print(editYear);
+    lcd.print('/');
+    lcd.print(editMonth);
+    lcd.print('/');
+    lcd.print(editDay);
+
+  } else if (mode == 3) {
+    // Adjust Alarm Mode
+    if (digitalRead(hourButtonPin) == LOW) {
+      editHour = (editHour + 1) % 24;
+      delay(200); // Debounce
+    }
+    if (digitalRead(minuteButtonPin) == LOW) {
+      editMinute = (editMinute + 1) % 60;
+      delay(200); // Debounce
+    }
+
+    lcd.print("Set Alarm: ");
+    lcd.print(editHour);
+    lcd.print(':');
+    lcd.print(editMinute);
+  }
+
+  lcd.setCursor(0, 3);
+  lcd.print("Alarm: ");
+  lcd.print(alarmHour);
+  lcd.print(':');
+  lcd.print(alarmMinute);
+
+  delay(1000);
+}
